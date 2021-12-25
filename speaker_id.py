@@ -11,7 +11,7 @@
 # python speaker_id.py --cfg=cfg/SincNet_TIMIT.cfg
 
 import os
-#import scipy.io.wavfile
+import scipy.io.wavfile
 import soundfile as sf
 import torch
 import torch.nn as nn
@@ -25,23 +25,26 @@ from dnn_models import MLP,flip
 from dnn_models import SincNet as CNN 
 from data_io import ReadList,read_conf,str_to_bool
 
+#CUDA_LAUNCH_BLOCKING=1
 
 def create_batches_rnd(batch_size,data_folder,wav_lst,N_snt,wlen,lab_dict,fact_amp):
     
  # Initialization of the minibatch (batch_size,[0=>x_t,1=>x_t+N,1=>random_samp])
- sig_batch=np.zeros([batch_size,wlen])
- lab_batch=np.zeros(batch_size)
-  
- snt_id_arr=np.random.randint(N_snt, size=batch_size)
  
- rand_amp_arr = np.random.uniform(1.0-fact_amp,1+fact_amp,batch_size)
-
+ sig_batch=np.zeros([batch_size,wlen] )
+ lab_batch=np.zeros(batch_size )
+  
+ snt_id_arr=np.random.randint(N_snt, size=batch_size )
+ 
+ rand_amp_arr = np.random.uniform(1.0-fact_amp,1+fact_amp,batch_size )
+ 
  for i in range(batch_size):
      
   # select a random sentence from the list 
   #[fs,signal]=scipy.io.wavfile.read(data_folder+wav_lst[snt_id_arr[i]])
   #signal=signal.astype(float)/32768
-
+  #print(z)
+  #z=z+1
   [signal, fs] = sf.read(data_folder+wav_lst[snt_id_arr[i]])
 
   # accesing to a random chunk
@@ -55,16 +58,18 @@ def create_batches_rnd(batch_size,data_folder,wav_lst,N_snt,wlen,lab_dict,fact_a
     signal = signal[:,0]
   
   sig_batch[i,:]=signal[snt_beg:snt_end]*rand_amp_arr[i]
+  #print(lab_dict[wav_lst[snt_id_arr[i]]])
   lab_batch[i]=lab_dict[wav_lst[snt_id_arr[i]]]
   
  inp=Variable(torch.from_numpy(sig_batch).float().cuda().contiguous())
  lab=Variable(torch.from_numpy(lab_batch).float().cuda().contiguous())
-  
+ 
  return inp,lab  
 
 
 
 # Reading cfg file
+
 options=read_conf()
 
 #[data]
@@ -74,6 +79,7 @@ pt_file=options.pt_file
 class_dict_file=options.lab_dict
 data_folder=options.data_folder+'/'
 output_folder=options.output_folder
+
 
 #[windowing]
 fs=int(options.fs)
@@ -92,6 +98,7 @@ cnn_act=list(map(str, options.cnn_act.split(',')))
 cnn_drop=list(map(float, options.cnn_drop.split(',')))
 
 
+
 #[dnn]
 fc_lay=list(map(int, options.fc_lay.split(',')))
 fc_drop=list(map(float, options.fc_drop.split(',')))
@@ -100,6 +107,7 @@ fc_use_batchnorm_inp=str_to_bool(options.fc_use_batchnorm_inp)
 fc_use_batchnorm=list(map(str_to_bool, options.fc_use_batchnorm.split(',')))
 fc_use_laynorm=list(map(str_to_bool, options.fc_use_laynorm.split(',')))
 fc_act=list(map(str, options.fc_act.split(',')))
+
 
 #[class]
 class_lay=list(map(int, options.class_lay.split(',')))
@@ -118,7 +126,7 @@ N_epochs=int(options.N_epochs)
 N_batches=int(options.N_batches)
 N_eval_epoch=int(options.N_eval_epoch)
 seed=int(options.seed)
-
+ 
 
 # training list
 wav_lst_tr=ReadList(tr_lst)
@@ -135,11 +143,11 @@ try:
 except:
     os.mkdir(output_folder) 
     
-    
+  
 # setting seed
 torch.manual_seed(seed)
 np.random.seed(seed)
-
+ 
 # loss function
 cost = nn.NLLLoss()
 
@@ -170,7 +178,7 @@ CNN_net=CNN(CNN_arch)
 CNN_net.cuda()
 
 # Loading label dictionary
-lab_dict=np.load(class_dict_file).item()
+lab_dict=np.load(class_dict_file,allow_pickle=True).item()
 
 
 
@@ -221,27 +229,30 @@ for epoch in range(N_epochs):
   
   test_flag=0
   CNN_net.train()
+  print("run")
   DNN1_net.train()
   DNN2_net.train()
  
   loss_sum=0
   err_sum=0
-
+   
   for i in range(N_batches):
-
+   
     [inp,lab]=create_batches_rnd(batch_size,data_folder,wav_lst_tr,snt_tr,wlen,lab_dict,0.2)
+    print("input: ",inp,lab) 
     pout=DNN2_net(DNN1_net(CNN_net(inp)))
     
     pred=torch.max(pout,dim=1)[1]
     loss = cost(pout, lab.long())
     err = torch.mean((pred!=lab.long()).float())
     
-   
+    print(pred.shape,lab.shape,loss)
     
     optimizer_CNN.zero_grad()
     optimizer_DNN1.zero_grad() 
     optimizer_DNN2.zero_grad() 
     
+     
     loss.backward()
     optimizer_CNN.step()
     optimizer_DNN1.step()
@@ -273,19 +284,19 @@ for epoch in range(N_epochs):
        
      #[fs,signal]=scipy.io.wavfile.read(data_folder+wav_lst_te[i])
      #signal=signal.astype(float)/32768
-
+     
      [signal, fs] = sf.read(data_folder+wav_lst_te[i])
 
      signal=torch.from_numpy(signal).float().cuda().contiguous()
      lab_batch=lab_dict[wav_lst_te[i]]
-    
+     	
      # split signals into chunks
      beg_samp=0
      end_samp=wlen
      
      N_fr=int((signal.shape[0]-wlen)/(wshift))
      
-
+     
      sig_arr=torch.zeros([Batch_dev,wlen]).float().cuda().contiguous()
      lab= Variable((torch.zeros(N_fr+1)+lab_batch).cuda().contiguous().long())
      pout=Variable(torch.zeros(N_fr+1,class_lay[-1]).float().cuda().contiguous())
@@ -302,11 +313,11 @@ for epoch in range(N_epochs):
              pout[count_fr_tot-Batch_dev:count_fr_tot,:]=DNN2_net(DNN1_net(CNN_net(inp)))
              count_fr=0
              sig_arr=torch.zeros([Batch_dev,wlen]).float().cuda().contiguous()
-   
+             
      if count_fr>0:
       inp=Variable(sig_arr[0:count_fr])
       pout[count_fr_tot-count_fr:count_fr_tot,:]=DNN2_net(DNN1_net(CNN_net(inp)))
-
+      
     
      pred=torch.max(pout,dim=1)[1]
      loss = cost(pout, lab.long())
@@ -318,12 +329,15 @@ for epoch in range(N_epochs):
     
      loss_sum=loss_sum+loss.detach()
      err_sum=err_sum+err.detach()
-    
+     #snt_te=3844
+    #print("hh")
+
+     
     err_tot_dev_snt=err_sum_snt/snt_te
     loss_tot_dev=loss_sum/snt_te
     err_tot_dev=err_sum/snt_te
-
-  
+    	
+   
    print("epoch %i, loss_tr=%f err_tr=%f loss_te=%f err_te=%f err_te_snt=%f" % (epoch, loss_tot,err_tot,loss_tot_dev,err_tot_dev,err_tot_dev_snt))
   
    with open(output_folder+"/res.res", "a") as res_file:
@@ -337,5 +351,7 @@ for epoch in range(N_epochs):
   
   else:
    print("epoch %i, loss_tr=%f err_tr=%f" % (epoch, loss_tot,err_tot))
+
+
 
 
