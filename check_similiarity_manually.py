@@ -4,6 +4,26 @@ Created on Tue Jan  4 16:48:48 2022
 
 @author: hp
 """
+import os
+import soundfile as sf
+import torch,gc
+import torch.nn as nn
+from torch.autograd import Variable
+import numpy as np
+from dnn_models import MLP
+from dnn_models import SincNet as CNN
+from data_io import ReadList,read_conf_inp,str_to_bool
+import sys
+
+#Record your file 
+# import required libraries
+import sounddevice as sd
+from scipy.io.wavfile import write
+import wavio as wv
+import soundfile as sf
+
+import json
+from sklearn.metrics.pairwise import cosine_similarity
 speakers=["ammu","nafisa"]
 for index in range (0,2):
     #generte scp file
