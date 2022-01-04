@@ -31,8 +31,8 @@ dict1={}
 dict2={}
 speakers=[]
 for i in range (0,2):
-    print("h")
-    
+    #print("h")
+    input("Press enter to record  voice")
     print("speak now....")
     
     # Start recorder with the given values
